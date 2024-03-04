@@ -68,7 +68,8 @@ void move_particle(particle_t& p, double size)
     }
 }
 
-static int procdim;
+static int procdim, procrow, proccol;
+static double procwidth;
 
 void init_simulation(particle_t *parts, int n, double size, int rank, int procs)
 {
@@ -77,7 +78,14 @@ void init_simulation(particle_t *parts, int n, double size, int rank, int procs)
     MPI_ASSERT(myrank == rank && nprocs == procs);
 
     procdim = static_cast<int>(std::sqrt(nprocs+0.0));
+    procwidth = size / procdim;
+    procrow = myrank / procdim;
+    proccol = myrank % procdim;
+
+    MPI_ASSERT(procwidth >= 2*cutoff + 1e-16);
     MPI_ASSERT(procdim*procdim == nprocs);
+
+    fprintf(stderr, "Hello from rank %d, whose grid location is P(%d, %d)\n", myrank, procrow, proccol);
 }
 
 void simulate_one_step(particle_t *parts, int n, double size, int rank, int procs)
