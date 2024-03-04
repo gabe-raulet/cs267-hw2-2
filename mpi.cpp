@@ -9,6 +9,28 @@
 #include <assert.h>
 #include <mpi.h>
 
+int getmyrank(MPI_Comm comm)
+{
+    int myrank;
+    MPI_Comm_rank(comm, &myrank);
+    return myrank;
+}
+
+int getnprocs(MPI_Comm comm)
+{
+    int nprocs;
+    MPI_Comm_size(comm, &nprocs);
+    return nprocs;
+}
+
+#define MPI_ASSERT(cond) do { \
+    if (!(cond)) { \
+        fprintf(stderr, "[rank %d] assertion (%s) failed at %s:%d\n", getmyrank(MPI_COMM_WORLD), #cond, __FILE__, __LINE__); \
+        MPI_Barrier(MPI_COMM_WORLD); \
+        MPI_Abort(MPI_COMM_WORLD, 1); \
+    } \
+} while (0);
+
 void apply_force(particle_t& target, const particle_t& ref)
 {
     double dx = ref.x - target.x;
@@ -48,7 +70,9 @@ void move_particle(particle_t& p, double size)
 
 void init_simulation(particle_t *parts, int n, double size, int rank, int procs)
 {
-
+    int myrank = getmyrank(MPI_COMM_WORLD);
+    int nprocs = getnprocs(MPI_COMM_WORLD);
+    MPI_ASSERT(myrank == rank && nprocs == procs);
 }
 
 void simulate_one_step(particle_t *parts, int n, double size, int rank, int procs)
