@@ -68,11 +68,16 @@ void move_particle(particle_t& p, double size)
     }
 }
 
+static int procdim;
+
 void init_simulation(particle_t *parts, int n, double size, int rank, int procs)
 {
     int myrank = getmyrank(MPI_COMM_WORLD);
     int nprocs = getnprocs(MPI_COMM_WORLD);
     MPI_ASSERT(myrank == rank && nprocs == procs);
+
+    procdim = static_cast<int>(std::sqrt(nprocs+0.0));
+    MPI_ASSERT(procdim*procdim == nprocs);
 }
 
 void simulate_one_step(particle_t *parts, int n, double size, int rank, int procs)
