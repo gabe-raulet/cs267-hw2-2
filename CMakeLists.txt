@@ -18,7 +18,7 @@ if (NOT ${GROUP_NAME} STREQUAL None)
     include(CPack)
 endif ()
 
-# We require the GNU compiler for this assignment.
+#We require the GNU compiler for this assignment.
 #if (NOT "${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 #    set(Prg-Clang "PrgEnv-cray")
 #    message(WARNING
