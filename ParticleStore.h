@@ -14,6 +14,17 @@
 #include <assert.h>
 #include <mpi.h>
 
+template <class T>
+std::string vector_string(const std::vector<T>& v)
+{
+    std::ostringstream os;
+    os << "{";
+    std::copy(v.begin(), v.end(), std::ostream_iterator<T>(os, ","));
+    os << "}";
+    return os.str();
+}
+
+
 #define MPI_ASSERT(cond) do { \
     if (!(cond)) { \
         fprintf(stderr, "[rank %d] assertion (%s) failed at %s:%d\n", getmyrank(MPI_COMM_WORLD), #cond, __FILE__, __LINE__); \
@@ -35,6 +46,8 @@ public:
     int get_particle_rank(const particle_t& p) const;
     void gather_particles(particle_t *parts) const;
 
+    std::vector<particle_t> gather_neighbor_particles() const;
+
     friend void swap(ParticleStore& lhs, ParticleStore& rhs);
 
     static int getmyrank(MPI_Comm comm);
@@ -54,6 +67,7 @@ private:
 
     void gather_items(std::vector<int>& allids, std::vector<particle_t>& allparts, int root) const;
     void disjoint_partition_check() const;
+    void sanity_check() const;
 };
 
 ParticleStore::ParticleStore()
@@ -159,9 +173,15 @@ int ParticleStore::myproccol() const
     return getmyrank(MPI_COMM_WORLD) % procdim;
 }
 
-int ParticleStore::get_particle_rank(const particle_t& p) const
+void ParticleStore::sanity_check() const
 {
     MPI_ASSERT(initialized);
+    MPI_ASSERT(myids.size() == myparts.size());
+}
+
+int ParticleStore::get_particle_rank(const particle_t& p) const
+{
+    sanity_check();
 
     int rowid = static_cast<int>(p.x / procwidth);
     int colid = static_cast<int>(p.y / procwidth);
@@ -171,7 +191,7 @@ int ParticleStore::get_particle_rank(const particle_t& p) const
 
 void ParticleStore::disjoint_partition_check() const
 {
-    MPI_ASSERT(initialized);
+    sanity_check();
 
     #ifdef NDEBUG
     return;
@@ -197,7 +217,7 @@ void ParticleStore::disjoint_partition_check() const
 
 void ParticleStore::print_info() const
 {
-    MPI_ASSERT(initialized);
+    sanity_check();
 
     int myrank = getmyrank(MPI_COMM_WORLD);
     int nprocs = getnprocs(MPI_COMM_WORLD);
@@ -221,7 +241,7 @@ void ParticleStore::print_info() const
 
 void ParticleStore::gather_items(std::vector<int>& allids, std::vector<particle_t>& allparts, int root) const
 {
-    MPI_ASSERT(initialized);
+    sanity_check();
 
     allids.clear();
     allparts.clear();
@@ -258,7 +278,7 @@ void ParticleStore::gather_items(std::vector<int>& allids, std::vector<particle_
 
 void ParticleStore::gather_particles(particle_t *parts) const
 {
-    MPI_ASSERT(initialized);
+    sanity_check();
 
     int myrank = getmyrank(MPI_COMM_WORLD);
     int nprocs = getnprocs(MPI_COMM_WORLD);
@@ -276,6 +296,30 @@ void ParticleStore::gather_particles(particle_t *parts) const
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
+}
+
+std::vector<particle_t> ParticleStore::gather_neighbor_particles() const
+{
+    sanity_check();
+
+    int myrank = getmyrank(MPI_COMM_WORLD);
+    int nprocs = getnprocs(MPI_COMM_WORLD);
+
+    int mycount = static_cast<int>(myparts.size());
+    std::vector<int> neighbor_counts(nneighbors);
+
+    MPI_Neighbor_allgather(&mycount, 1, MPI_INT, neighbor_counts.data(), 1, MPI_INT, gridcomm);
+
+    std::vector<int> displs(nneighbors);
+    displs[0] = 0;
+    std::partial_sum(neighbor_counts.begin(), neighbor_counts.end()-1, displs.begin()+1);
+
+    int totrecv = neighbor_counts.back() + displs.back();
+    std::vector<particle_t> parts(totrecv);
+
+    MPI_Neighbor_allgatherv(myparts.data(), mycount, PARTICLE, parts.data(), neighbor_counts.data(), displs.data(), PARTICLE, gridcomm);
+
+    return parts;
 }
 
 

@@ -12,16 +12,6 @@
 #include <assert.h>
 #include <mpi.h>
 
-template <class T>
-std::string vector_string(const std::vector<T>& v)
-{
-    std::ostringstream os;
-    os << "{";
-    std::copy(v.begin(), v.end(), std::ostream_iterator<T>(os, ","));
-    os << "}";
-    return os.str();
-}
-
 void apply_force(particle_t& target, const particle_t& ref)
 {
     double dx = ref.x - target.x;
@@ -65,6 +55,8 @@ void init_simulation(particle_t *parts, int n, double size, int rank, int procs)
 {
     store = ParticleStore(parts, n, size);
     store.print_info();
+
+    store.gather_neighbor_particles();
 }
 
 void simulate_one_step(particle_t *parts, int n, double size, int rank, int procs)
