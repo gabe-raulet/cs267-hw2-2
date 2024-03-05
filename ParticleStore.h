@@ -33,6 +33,7 @@ public:
     int myproccol() const;
 
     int get_particle_rank(const particle_t& p) const;
+    void gather_particles(particle_t *parts) const;
 
     friend void swap(ParticleStore& lhs, ParticleStore& rhs);
 
@@ -51,7 +52,8 @@ private:
     std::vector<particle_t> myparts;
     bool initialized;
 
-    void disjoint_partition_check();
+    void gather_items(std::vector<int>& allids, std::vector<particle_t>& allparts, int root) const;
+    void disjoint_partition_check() const;
 };
 
 ParticleStore::ParticleStore()
@@ -167,7 +169,7 @@ int ParticleStore::get_particle_rank(const particle_t& p) const
     return rowid*procdim + colid;
 }
 
-void ParticleStore::disjoint_partition_check()
+void ParticleStore::disjoint_partition_check() const
 {
     MPI_ASSERT(initialized);
 
@@ -178,39 +180,18 @@ void ParticleStore::disjoint_partition_check()
     int myrank = getmyrank(MPI_COMM_WORLD);
     int nprocs = getnprocs(MPI_COMM_WORLD);
 
-    int totcount;
-    int mycount = static_cast<int>(myids.size());
-    MPI_Reduce(&mycount, &totcount, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-    if (myrank == 0) MPI_ASSERT(totcount == numparts);
-
-    std::vector<int> recvcounts, displs;
     std::vector<int> allids;
+    std::vector<particle_t> allparts;
 
-    if (myrank == 0)
-    {
-        recvcounts.resize(nprocs);
-        displs.resize(nprocs);
-    }
-
-    MPI_Gather(&mycount, 1, MPI_INT, recvcounts.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-    if (myrank == 0)
-    {
-        displs[0] = 0;
-        std::partial_sum(recvcounts.begin(), recvcounts.end()-1, displs.begin()+1);
-        allids.resize(totcount);
-    }
-
-    MPI_Gatherv(myids.data(), mycount, MPI_INT, allids.data(), recvcounts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
+    gather_items(allids, allparts, 0);
 
     if (myrank == 0)
     {
         int k = 0;
         std::sort(allids.begin(), allids.end());
-        std::vector<int> cmp(totcount);
+        std::vector<int> cmp(numparts);
         std::generate(cmp.begin(), cmp.end(), [&]() { return k++; });
         MPI_ASSERT(cmp == allids);
-
     }
 }
 
@@ -236,6 +217,65 @@ void ParticleStore::print_info() const
         }
         MPI_Barrier(MPI_COMM_WORLD);
     }
+}
+
+void ParticleStore::gather_items(std::vector<int>& allids, std::vector<particle_t>& allparts, int root) const
+{
+    MPI_ASSERT(initialized);
+
+    allids.clear();
+    allparts.clear();
+
+    int myrank = getmyrank(MPI_COMM_WORLD);
+    int nprocs = getnprocs(MPI_COMM_WORLD);
+
+    int totcount;
+    int mycount = static_cast<int>(myids.size());
+    MPI_Reduce(&mycount, &totcount, 1, MPI_INT, MPI_SUM, root, MPI_COMM_WORLD);
+    if (myrank == root) MPI_ASSERT(totcount == numparts);
+
+    std::vector<int> recvcounts, displs;
+
+    if (myrank == root)
+    {
+        recvcounts.resize(nprocs);
+        displs.resize(nprocs);
+    }
+
+    MPI_Gather(&mycount, 1, MPI_INT, recvcounts.data(), 1, MPI_INT, root, MPI_COMM_WORLD);
+
+    if (myrank == root)
+    {
+        displs[0] = 0;
+        std::partial_sum(recvcounts.begin(), recvcounts.end()-1, displs.begin()+1);
+        allids.resize(numparts);
+        allparts.resize(numparts);
+    }
+
+    MPI_Gatherv(myids.data(), mycount, MPI_INT, allids.data(), recvcounts.data(), displs.data(), MPI_INT, root, MPI_COMM_WORLD);
+    MPI_Gatherv(myparts.data(), mycount, PARTICLE, allparts.data(), recvcounts.data(), displs.data(), PARTICLE, root, MPI_COMM_WORLD);
+}
+
+void ParticleStore::gather_particles(particle_t *parts) const
+{
+    MPI_ASSERT(initialized);
+
+    int myrank = getmyrank(MPI_COMM_WORLD);
+    int nprocs = getnprocs(MPI_COMM_WORLD);
+
+    std::vector<int> allids;
+    std::vector<particle_t> allparts;
+
+    gather_items(allids, allparts, 0);
+
+    MPI_ASSERT(allids.size() == numparts && allparts.size() == numparts);
+
+    for (int i = 0; i < numparts; ++i)
+    {
+        parts[allids[i]] = allparts[i];
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
 }
 
 
