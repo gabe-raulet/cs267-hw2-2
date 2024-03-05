@@ -112,7 +112,6 @@ private:
 
     void gather_items(std::vector<int>& allids, std::vector<particle_t>& allparts, int root) const;
     void disjoint_partition_check() const;
-    void sanity_check() const;
 };
 
 ParticleStore::ParticleStore()
@@ -220,15 +219,9 @@ int ParticleStore::myproccol() const
     return getmyrank(MPI_COMM_WORLD) % procdim;
 }
 
-void ParticleStore::sanity_check() const
-{
-    MPI_ASSERT(initialized);
-    MPI_ASSERT(myids.size() == myparts.size());
-}
-
 int ParticleStore::get_particle_rank(const particle_t& p) const
 {
-    sanity_check();
+    MPI_ASSERT(initialized);
 
     int rowid = static_cast<int>(p.x / procwidth);
     int colid = static_cast<int>(p.y / procwidth);
@@ -238,7 +231,7 @@ int ParticleStore::get_particle_rank(const particle_t& p) const
 
 void ParticleStore::disjoint_partition_check() const
 {
-    sanity_check();
+    MPI_ASSERT(initialized);
 
     #ifdef NDEBUG
     return;
@@ -264,7 +257,7 @@ void ParticleStore::disjoint_partition_check() const
 
 void ParticleStore::print_info() const
 {
-    sanity_check();
+    MPI_ASSERT(initialized);
 
     int myrank = getmyrank(MPI_COMM_WORLD);
     int nprocs = getnprocs(MPI_COMM_WORLD);
@@ -288,7 +281,7 @@ void ParticleStore::print_info() const
 
 void ParticleStore::gather_items(std::vector<int>& allids, std::vector<particle_t>& allparts, int root) const
 {
-    sanity_check();
+    MPI_ASSERT(initialized);
 
     allids.clear();
     allparts.clear();
@@ -325,7 +318,7 @@ void ParticleStore::gather_items(std::vector<int>& allids, std::vector<particle_
 
 void ParticleStore::gather_particles(particle_t *parts) const
 {
-    sanity_check();
+    MPI_ASSERT(initialized);
 
     int myrank = getmyrank(MPI_COMM_WORLD);
     int nprocs = getnprocs(MPI_COMM_WORLD);
@@ -350,7 +343,7 @@ void ParticleStore::gather_particles(particle_t *parts) const
 
 std::vector<named_particle_t> ParticleStore::get_my_named_particles() const
 {
-    sanity_check();
+    MPI_ASSERT(initialized);
 
     std::vector<named_particle_t> parts;
     parts.reserve(myids.size());
@@ -366,7 +359,7 @@ std::vector<named_particle_t> ParticleStore::get_my_named_particles() const
 
 std::vector<named_particle_t> ParticleStore::gather_neighbor_particles() const
 {
-    sanity_check();
+    MPI_ASSERT(initialized);
 
     int myrank = getmyrank(MPI_COMM_WORLD);
     int nprocs = getnprocs(MPI_COMM_WORLD);
@@ -405,7 +398,7 @@ std::vector<named_particle_t> ParticleStore::gather_neighbor_particles() const
 
 void ParticleStore::communicate_particles()
 {
-    sanity_check();
+    MPI_ASSERT(initialized);
     disjoint_partition_check();
 
     int myrank = getmyrank(MPI_COMM_WORLD);
@@ -435,7 +428,7 @@ void ParticleStore::communicate_particles()
 
 void ParticleStore::compute_forces()
 {
-    sanity_check();
+    MPI_ASSERT(initialized);
     disjoint_partition_check();
 
     for (auto it = myparts.begin(); it != myparts.end(); ++it)
@@ -454,7 +447,7 @@ void ParticleStore::compute_forces()
 
 void ParticleStore::move_particles()
 {
-    sanity_check();
+    MPI_ASSERT(initialized);
     disjoint_partition_check();
 
     for (auto it = myparts.begin(); it != myparts.end(); ++it)
