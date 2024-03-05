@@ -247,8 +247,6 @@ void ParticleStore::gather_particles(particle_t *parts) const
     if (myrank == 0)
         for (int i = 0; i < numparts; ++i)
             parts[allparts[i].id] = allparts[i].p;
-
-    MPI_Barrier(MPI_COMM_WORLD);
 }
 
 std::vector<named_particle_t> ParticleStore::get_my_particles() const
@@ -295,15 +293,11 @@ void ParticleStore::compute_forces()
     for (auto it = parts.begin(); it != parts.end(); ++it)
         it->p.ax = it->p.ay = 0;
 
-    MPI_Barrier(MPI_COMM_WORLD);
-
     std::vector<named_particle_t> refparts = gather_neighbor_particles();
 
     for (auto it1 = parts.begin(); it1 != parts.end(); ++it1)
         for (auto it2 = refparts.begin(); it2 != refparts.end(); ++it2)
             apply_force(it1->p, it2->p);
-
-    MPI_Barrier(MPI_COMM_WORLD);
 }
 
 void ParticleStore::move_particles()
@@ -312,8 +306,6 @@ void ParticleStore::move_particles()
 
     for (auto it = parts.begin(); it != parts.end(); ++it)
         move_particle(it->p, gridsize);
-
-    MPI_Barrier(MPI_COMM_WORLD);
 }
 
 #endif
