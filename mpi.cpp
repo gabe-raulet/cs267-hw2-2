@@ -26,8 +26,8 @@ typedef struct { particle_t p; int id; } named_particle_t;
 int procdim;
 int numrowprocs, numcolprocs;
 int myrowproc, mycolproc;
+double rowprocwidth, colprocwidth;
 int numparts;
-double procwidth;
 double gridsize;
 int nneighbors;
 std::vector<named_particle_t> myparts;
@@ -78,10 +78,10 @@ int get_particle_rank(const particle_t& p)
      * by the x position coordinate (determining the processor row) and
      * the y position coordinate (determining the processor column).
      */
-    int rowid = static_cast<int>(p.x / procwidth);
-    int colid = static_cast<int>(p.y / procwidth);
+    int rowid = static_cast<int>(p.x / rowprocwidth);
+    int colid = static_cast<int>(p.y / colprocwidth);
 
-    return rowid*procdim + colid;
+    return rowid*numcolprocs + colid;
 }
 
 void init_simulation(particle_t *parts, int n, double size, int rank, int procs)
@@ -102,17 +102,23 @@ void init_simulation(particle_t *parts, int n, double size, int rank, int procs)
     numparts = n;
     gridsize = size;
     procdim = static_cast<int>(std::sqrt(nprocs+0.0));
-    procwidth = size / procdim;
-    myrowproc = myrank / procdim;
-    mycolproc = myrank % procdim;
     numrowprocs = numcolprocs = procdim;
+
+    while (numrowprocs*numcolprocs <= nprocs)
+        numcolprocs++;
+    numcolprocs--;
+
+    rowprocwidth = size / numrowprocs;
+    colprocwidth = size / numcolprocs;
+    myrowproc = myrank / numcolprocs;
+    mycolproc = myrank % numcolprocs;
 
     if (myrank == 0) fprintf(stderr, "Running with %d processor rows and %d processor columns (%d processors unused)\n", numrowprocs, numcolprocs, nprocs - numrowprocs*numcolprocs);
 
     /*
      * Make sure that each processor square is not too small.
      */
-    MPI_ASSERT(procwidth >= 2*cutoff + 1e-16);
+    MPI_ASSERT(std::min(rowprocwidth, colprocwidth) >= 2*cutoff + 1e-16);
 
     /* Every processor has the following rank-local variables:
      *
@@ -150,16 +156,16 @@ void init_simulation(particle_t *parts, int n, double size, int rank, int procs)
      */
     std::vector<int> dests, weights;
 
-    if (myrank < procdim*procdim)
+    if (myrank < numrowprocs*numcolprocs)
     {
         for (int dx = -1; dx <= 1; ++dx)
             for (int dy = -1; dy <= 1; ++dy)
             {
-                int dest = myrank + (dx*procdim + dy);
+                int dest = myrank + (dx*numcolprocs + dy);
                 int row = myrowproc + dx;
                 int col = mycolproc + dy;
 
-                if (row >= 0 && row < procdim && col >= 0 && col < procdim)
+                if (row >= 0 && row < numrowprocs && col >= 0 && col < numcolprocs)
                 {
                     dests.push_back(dest);
                     weights.push_back(1);
