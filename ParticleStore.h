@@ -29,6 +29,9 @@ public:
     ParticleStore(const particle_t *parts, int numparts, double size);
     ParticleStore& operator=(ParticleStore other);
 
+    int myprocrow() const;
+    int myproccol() const;
+
     int get_particle_rank(const particle_t& p) const;
 
     friend void swap(ParticleStore& lhs, ParticleStore& rhs);
@@ -112,6 +115,16 @@ int ParticleStore::getnprocs(MPI_Comm comm)
     return nprocs;
 }
 
+int ParticleStore::myprocrow() const
+{
+    return getmyrank(MPI_COMM_WORLD) / procdim;
+}
+
+int ParticleStore::myproccol() const
+{
+    return getmyrank(MPI_COMM_WORLD) % procdim;
+}
+
 int ParticleStore::get_particle_rank(const particle_t& p) const
 {
     MPI_ASSERT(initialized);
@@ -187,7 +200,7 @@ void ParticleStore::print_info() const
     {
         if (myrank == i)
         {
-            fprintf(stderr, "Rank %d currently stores %d particles\n", myrank, static_cast<int>(myids.size()));
+            fprintf(stderr, "P(%d, %d) currently stores %d particles\n", myprocrow(), myproccol(), static_cast<int>(myids.size()));
         }
         MPI_Barrier(MPI_COMM_WORLD);
     }
