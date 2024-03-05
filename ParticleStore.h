@@ -83,6 +83,7 @@ public:
     void move_particles();
     void communicate_particles();
 
+    int mynumparts() const;
     int myprocrow() const;
     int myproccol() const;
 
@@ -209,6 +210,11 @@ int ParticleStore::getnprocs(MPI_Comm comm)
     return nprocs;
 }
 
+int ParticleStore::mynumparts() const
+{
+    return myids.size();
+}
+
 int ParticleStore::myprocrow() const
 {
     return getmyrank(MPI_COMM_WORLD) / procdim;
@@ -273,7 +279,7 @@ void ParticleStore::print_info() const
     {
         if (myrank == i)
         {
-            fprintf(stderr, "P(%d, %d) currently stores %d particles and has %d neighbor processors\n", myprocrow(), myproccol(), static_cast<int>(myids.size()), nneighbors);
+            fprintf(stderr, "P(%d, %d) currently stores %d particles and has %d neighbor processors\n", myprocrow(), myproccol(), mynumparts(), nneighbors);
         }
         MPI_Barrier(MPI_COMM_WORLD);
     }
@@ -290,7 +296,7 @@ void ParticleStore::gather_items(std::vector<int>& allids, std::vector<particle_
     int nprocs = getnprocs(MPI_COMM_WORLD);
 
     int totcount;
-    int mycount = static_cast<int>(myids.size());
+    int mycount = mynumparts();
     MPI_Reduce(&mycount, &totcount, 1, MPI_INT, MPI_SUM, root, MPI_COMM_WORLD);
     if (myrank == root) MPI_ASSERT(totcount == numparts);
 
@@ -345,10 +351,11 @@ std::vector<named_particle_t> ParticleStore::get_my_named_particles() const
 {
     MPI_ASSERT(initialized);
 
+    int n = mynumparts();
     std::vector<named_particle_t> parts;
-    parts.reserve(myids.size());
+    parts.reserve(n);
 
-    for (int i = 0; i < myids.size(); ++i)
+    for (int i = 0; i < n; ++i)
     {
         named_particle_t p = {myparts[i], myids[i]};
         parts.push_back(p);
@@ -364,7 +371,7 @@ std::vector<named_particle_t> ParticleStore::gather_neighbor_particles() const
     int myrank = getmyrank(MPI_COMM_WORLD);
     int nprocs = getnprocs(MPI_COMM_WORLD);
 
-    int mycount = static_cast<int>(myparts.size());
+    int mycount = mynumparts();
     std::vector<int> neighbor_counts(nneighbors);
 
     MPI_Neighbor_allgather(&mycount, 1, MPI_INT, neighbor_counts.data(), 1, MPI_INT, gridcomm);
@@ -419,7 +426,7 @@ void ParticleStore::communicate_particles()
     }
 
     int totcount;
-    int mycount = static_cast<int>(myids.size());
+    int mycount = mynumparts();
     MPI_Reduce(&mycount, &totcount, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
     if (myrank == 0) MPI_ASSERT(totcount == numparts);
 
