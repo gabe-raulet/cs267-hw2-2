@@ -17,26 +17,13 @@ BUILD_DIR=$SRC_DIR/build
 #python $CORRECTNESS_DIR/correctness-check.py $BUILD_DIR/mpi.n1000.out $CORRECTNESS_DIR/verf.n1000.out
 #rm $BUILD_DIR/mpi.n1000.out
 
-srun -N 1 --ntasks-per-node=1 $BUILD_DIR/mpi -s 1 -n 1000 -o $BUILD_DIR/mpi.n1000.out
+srun -N 1 --ntasks-per-node=64 $BUILD_DIR/mpi -s 1 -n 1000 -o $BUILD_DIR/mpi.n1000.out
 python $CORRECTNESS_DIR/correctness-check.py $BUILD_DIR/mpi.n1000.out $CORRECTNESS_DIR/verf.n1000.out
 rm $BUILD_DIR/mpi.n1000.out
 
-srun -N 1 --ntasks-per-node=4 $BUILD_DIR/mpi -s 1 -n 1000 -o $BUILD_DIR/mpi.n1000.out
-python $CORRECTNESS_DIR/correctness-check.py $BUILD_DIR/mpi.n1000.out $CORRECTNESS_DIR/verf.n1000.out
-rm $BUILD_DIR/mpi.n1000.out
+srun -N 1 --ntasks-per-node=64 $BUILD_DIR/mpi -s 1 -n 10000 -o $BUILD_DIR/mpi.n10000.out
+python $CORRECTNESS_DIR/correctness-check.py $BUILD_DIR/mpi.n10000.out $CORRECTNESS_DIR/verf.n10000.out
+rm $BUILD_DIR/mpi.n10000.out
 
-srun -N 1 --ntasks-per-node=16 $BUILD_DIR/mpi -s 1 -n 1000 -o $BUILD_DIR/mpi.n1000.out
-python $CORRECTNESS_DIR/correctness-check.py $BUILD_DIR/mpi.n1000.out $CORRECTNESS_DIR/verf.n1000.out
-rm $BUILD_DIR/mpi.n1000.out
-
-#srun -N 1 --ntasks-per-node=64 $BUILD_DIR/mpi -s 1 -n 1000 -o $BUILD_DIR/mpi.n1000.out
-#python $CORRECTNESS_DIR/correctness-check.py $BUILD_DIR/mpi.n1000.out $CORRECTNESS_DIR/verf.n1000.out
-#rm $BUILD_DIR/mpi.n1000.out
-
-#srun -N 1 --ntasks-per-node=64 $BUILD_DIR/mpi -s 1 -n 10000 -o $BUILD_DIR/mpi.n10000.out
-#python $CORRECTNESS_DIR/correctness-check.py $BUILD_DIR/mpi.n10000.out $CORRECTNESS_DIR/verf.n10000.out
-#rm $BUILD_DIR/mpi.n10000.out
-
-#srun -N 1 --ntasks-per-node=64 $BUILD_DIR/mpi -s 1 -n 100000 -o $BUILD_DIR/mpi.n100000.out
-#python $CORRECTNESS_DIR/correctness-check.py $BUILD_DIR/mpi.n100000.out $CORRECTNESS_DIR/verf.n100000.out
-#rm $BUILD_DIR/mpi.n100000.out
+srun -N 1 --ntasks-per-node=64 $BUILD_DIR/mpi -s 1 -n 100000
+srun -N 1 --ntasks-per-node=64 $BUILD_DIR/mpi -s 1 -n 1000000
