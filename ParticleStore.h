@@ -16,6 +16,43 @@
 
 typedef struct { particle_t p; int id; } named_particle_t;
 
+void apply_force(particle_t& target, const particle_t& ref)
+{
+    double dx = ref.x - target.x;
+    double dy = ref.y - target.y;
+    double r2 = dx * dx + dy * dy;
+
+    if (r2 > cutoff * cutoff)
+        return;
+
+    r2 = fmax(r2, min_r * min_r);
+    double r = sqrt(r2);
+
+    double coef = (1 - cutoff / r) / r2 / mass;
+    target.ax += coef * dx;
+    target.ay += coef * dy;
+}
+
+void move_particle(particle_t& p, double size)
+{
+    p.vx += p.ax * dt;
+    p.vy += p.ay * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+    while (p.x < 0 || p.x > size)
+    {
+        p.x = p.x < 0 ? -p.x : 2 * size - p.x;
+        p.vx = -p.vx;
+    }
+
+    while (p.y < 0 || p.y > size)
+    {
+        p.y = p.y < 0 ? -p.y : 2 * size - p.y;
+        p.vy = -p.vy;
+    }
+}
+
 template <class T>
 std::string vector_string(const std::vector<T>& v)
 {
@@ -42,6 +79,8 @@ public:
     ParticleStore(const particle_t *parts, int numparts, double size);
     ParticleStore& operator=(ParticleStore other);
 
+    void compute_forces();
+    void move_particles();
     void communicate_particles();
 
     int myprocrow() const;
@@ -66,6 +105,7 @@ private:
     int nneighbors;
     int numparts;
     double procwidth;
+    double gridsize;
     std::vector<int> myids;
     std::vector<particle_t> myparts;
     bool initialized;
@@ -84,12 +124,13 @@ ParticleStore::ParticleStore(const ParticleStore& rhs)
       nneighbors(rhs.nneighbors),
       numparts(rhs.numparts),
       procwidth(rhs.procwidth),
+      gridsize(rhs.gridsize),
       myids(rhs.myids),
       myparts(rhs.myparts),
       initialized(rhs.initialized) {}
 
 ParticleStore::ParticleStore(const particle_t *parts, int numparts, double size)
-    : numparts(numparts), initialized(true)
+    : numparts(numparts), gridsize(size), initialized(true)
 {
     int myrank = getmyrank(MPI_COMM_WORLD);
     int nprocs = getnprocs(MPI_COMM_WORLD);
@@ -149,6 +190,7 @@ void swap(ParticleStore& lhs, ParticleStore& rhs)
     std::swap(lhs.numparts, rhs.numparts);
     std::swap(lhs.nneighbors, rhs.nneighbors);
     std::swap(lhs.procwidth, rhs.procwidth);
+    std::swap(lhs.gridsize, rhs.gridsize);
     std::swap(lhs.myids, rhs.myids);
     std::swap(lhs.myparts, rhs.myparts);
     std::swap(lhs.initialized, rhs.initialized);
@@ -247,6 +289,7 @@ void ParticleStore::print_info() const
 void ParticleStore::gather_items(std::vector<int>& allids, std::vector<particle_t>& allparts, int root) const
 {
     sanity_check();
+    disjoint_partition_check();
 
     allids.clear();
     allparts.clear();
@@ -361,6 +404,7 @@ std::vector<named_particle_t> ParticleStore::gather_neighbor_particles() const
 void ParticleStore::communicate_particles()
 {
     sanity_check();
+    disjoint_partition_check();
 
     int myrank = getmyrank(MPI_COMM_WORLD);
     int nprocs = getnprocs(MPI_COMM_WORLD);
@@ -378,6 +422,34 @@ void ParticleStore::communicate_particles()
             myparts.push_back(it->p);
         }
     }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+}
+
+void ParticleStore::compute_forces()
+{
+    sanity_check();
+    disjoint_partition_check();
+
+    for (auto it = myparts.begin(); it != myparts.end(); ++it)
+        it->ax = it->ay = 0;
+
+    std::vector<named_particle_t> refparts = gather_neighbor_particles();
+
+    for (auto it1 = myparts.begin(); it1 != myparts.end(); ++it1)
+        for (auto it2 = refparts.begin(); it2 != refparts.end(); ++it2)
+            apply_force(*it1, it2->p);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+}
+
+void ParticleStore::move_particles()
+{
+    sanity_check();
+    disjoint_partition_check();
+
+    for (auto it = myparts.begin(); it != myparts.end(); ++it)
+        move_particle(*it, gridsize);
 
     MPI_Barrier(MPI_COMM_WORLD);
 }
