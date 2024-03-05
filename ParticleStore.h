@@ -110,11 +110,8 @@ private:
     double procwidth;
     double gridsize;
     std::vector<named_particle_t> namedparts;
-    //std::vector<int> myids;
-    //std::vector<particle_t> myparts;
     bool initialized;
 
-    //void gather_items(std::vector<int>& allids, std::vector<particle_t>& allparts, int root) const;
     void gather_named_particles(std::vector<named_particle_t>& parts, int root) const;
     void disjoint_partition_check() const;
 };
@@ -130,8 +127,6 @@ ParticleStore::ParticleStore(const ParticleStore& rhs)
       procwidth(rhs.procwidth),
       gridsize(rhs.gridsize),
       namedparts(rhs.namedparts),
-      //myids(rhs.myids),
-      //myparts(rhs.myparts),
       initialized(rhs.initialized) {}
 
 ParticleStore::ParticleStore(const particle_t *parts, int numparts, double size)
@@ -148,11 +143,7 @@ ParticleStore::ParticleStore(const particle_t *parts, int numparts, double size)
 
     for (int i = 0; i < numparts; ++i)
         if (get_particle_rank(parts[i]) == myrank)
-        {
             namedparts.push_back({parts[i], i});
-            //myids.push_back(i);
-            //myparts.push_back(parts[i]);
-        }
 
     disjoint_partition_check();
 
@@ -207,8 +198,6 @@ void swap(ParticleStore& lhs, ParticleStore& rhs)
     std::swap(lhs.procwidth, rhs.procwidth);
     std::swap(lhs.gridsize, rhs.gridsize);
     std::swap(lhs.namedparts, rhs.namedparts);
-    //std::swap(lhs.myids, rhs.myids);
-    //std::swap(lhs.myparts, rhs.myparts);
     std::swap(lhs.initialized, rhs.initialized);
 }
 
@@ -261,9 +250,6 @@ void ParticleStore::disjoint_partition_check() const
 
     int myrank = getmyrank(MPI_COMM_WORLD);
     int nprocs = getnprocs(MPI_COMM_WORLD);
-
-    //std::vector<int> allids;
-    //std::vector<particle_t> allparts;
 
     std::vector<named_particle_t> allparts;
     gather_named_particles(allparts, 0);
@@ -334,47 +320,7 @@ void ParticleStore::gather_named_particles(std::vector<named_particle_t>& parts,
     }
 
     MPI_Gatherv(namedparts.data(), mycount, NAMED_PARTICLE, parts.data(), recvcounts.data(), displs.data(), NAMED_PARTICLE, root, MPI_COMM_WORLD);
-    //MPI_Gatherv(myids.data(), mycount, MPI_INT, allids.data(), recvcounts.data(), displs.data(), MPI_INT, root, MPI_COMM_WORLD);
-    //MPI_Gatherv(myparts.data(), mycount, PARTICLE, allparts.data(), recvcounts.data(), displs.data(), PARTICLE, root, MPI_COMM_WORLD);
-
 }
-
-//void ParticleStore::gather_items(std::vector<int>& allids, std::vector<particle_t>& allparts, int root) const
-//{
-    //MPI_ASSERT(initialized);
-
-    //allids.clear();
-    //allparts.clear();
-
-    //int myrank = getmyrank(MPI_COMM_WORLD);
-    //int nprocs = getnprocs(MPI_COMM_WORLD);
-
-    //int totcount;
-    //int mycount = mynumparts();
-    //MPI_Reduce(&mycount, &totcount, 1, MPI_INT, MPI_SUM, root, MPI_COMM_WORLD);
-    //if (myrank == root) MPI_ASSERT(totcount == numparts);
-
-    //std::vector<int> recvcounts, displs;
-
-    //if (myrank == root)
-    //{
-        //recvcounts.resize(nprocs);
-        //displs.resize(nprocs);
-    //}
-
-    //MPI_Gather(&mycount, 1, MPI_INT, recvcounts.data(), 1, MPI_INT, root, MPI_COMM_WORLD);
-
-    //if (myrank == root)
-    //{
-        //displs[0] = 0;
-        //std::partial_sum(recvcounts.begin(), recvcounts.end()-1, displs.begin()+1);
-        //allids.resize(numparts);
-        //allparts.resize(numparts);
-    //}
-
-    //MPI_Gatherv(myids.data(), mycount, MPI_INT, allids.data(), recvcounts.data(), displs.data(), MPI_INT, root, MPI_COMM_WORLD);
-    //MPI_Gatherv(myparts.data(), mycount, PARTICLE, allparts.data(), recvcounts.data(), displs.data(), PARTICLE, root, MPI_COMM_WORLD);
-//}
 
 void ParticleStore::gather_particles(particle_t *parts) const
 {
@@ -383,8 +329,6 @@ void ParticleStore::gather_particles(particle_t *parts) const
     int myrank = getmyrank(MPI_COMM_WORLD);
     int nprocs = getnprocs(MPI_COMM_WORLD);
 
-    //std::vector<int> allids;
-    //std::vector<particle_t> allparts;
     std::vector<named_particle_t> allparts;
 
     gather_named_particles(allparts, 0);
@@ -404,18 +348,6 @@ std::vector<named_particle_t> ParticleStore::get_my_named_particles() const
 {
     MPI_ASSERT(initialized);
     return namedparts;
-
-    //int n = mynumparts();
-    //std::vector<named_particle_t> parts;
-    //parts.reserve(n);
-
-    //for (int i = 0; i < n; ++i)
-    //{
-        //named_particle_t p = {myparts[i], myids[i]};
-        //parts.push_back(p);
-    //}
-
-    //return parts;
 }
 
 std::vector<named_particle_t> ParticleStore::gather_neighbor_particles() const
@@ -456,18 +388,10 @@ void ParticleStore::communicate_particles()
     std::vector<named_particle_t> named_neighbors = gather_neighbor_particles();
 
     namedparts.clear();
-    //myids.clear();
-    //myparts.clear();
 
     for (auto it = named_neighbors.begin(); it != named_neighbors.end(); ++it)
-    {
         if (get_particle_rank(it->p) == myrank)
-        {
             namedparts.push_back(*it);
-            //myids.push_back(it->id);
-            //myparts.push_back(it->p);
-        }
-    }
 
     int totcount;
     int mycount = mynumparts();
