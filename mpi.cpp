@@ -24,6 +24,8 @@
 typedef struct { particle_t p; int id; } named_particle_t;
 
 int procdim;
+int numrowprocs, numcolprocs;
+int myrowproc, mycolproc;
 int numparts;
 double procwidth;
 double gridsize;
@@ -101,11 +103,11 @@ void init_simulation(particle_t *parts, int n, double size, int rank, int procs)
     gridsize = size;
     procdim = static_cast<int>(std::sqrt(nprocs+0.0));
     procwidth = size / procdim;
+    myrowproc = myrank / procdim;
+    mycolproc = myrank % procdim;
+    numrowprocs = numcolprocs = procdim;
 
-    /*
-     * We assume (for now) that there is a square number of procesors.
-     */
-    MPI_ASSERT(procdim*procdim == nprocs);
+    if (myrank == 0) fprintf(stderr, "Running with %d processor rows and %d processor columns (%d processors unused)\n", numrowprocs, numcolprocs, nprocs - numrowprocs*numcolprocs);
 
     /*
      * Make sure that each processor square is not too small.
@@ -147,22 +149,23 @@ void init_simulation(particle_t *parts, int n, double size, int rank, int procs)
      * processors and whose edges represent neighbor processors.
      */
     std::vector<int> dests, weights;
-    int procrow = myrank / procdim;
-    int proccol = myrank % procdim;
 
-    for (int dx = -1; dx <= 1; ++dx)
-        for (int dy = -1; dy <= 1; ++dy)
-        {
-            int dest = myrank + (dx*procdim + dy);
-            int row = procrow + dx;
-            int col = proccol + dy;
-
-            if (row >= 0 && row < procdim && col >= 0 && col < procdim)
+    if (myrank < procdim*procdim)
+    {
+        for (int dx = -1; dx <= 1; ++dx)
+            for (int dy = -1; dy <= 1; ++dy)
             {
-                dests.push_back(dest);
-                weights.push_back(1);
+                int dest = myrank + (dx*procdim + dy);
+                int row = myrowproc + dx;
+                int col = mycolproc + dy;
+
+                if (row >= 0 && row < procdim && col >= 0 && col < procdim)
+                {
+                    dests.push_back(dest);
+                    weights.push_back(1);
+                }
             }
-        }
+    }
 
     int reorder = 0; /* TODO: Will want to make reorder=1 for improved performance, but will need to be careful! */
     nneighbors = static_cast<int>(dests.size());
@@ -198,6 +201,11 @@ std::vector<named_particle_t> gather_neighbor_particles()
      * This function gathers all particles stored in neighboring
      * processors to this processor.
      */
+
+    if (nneighbors == 0)
+    {
+        return std::vector<named_particle_t>();
+    }
 
     int mycount = static_cast<int>(myparts.size());
     std::vector<int> recvcounts(nneighbors);
