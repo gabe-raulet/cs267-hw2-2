@@ -42,7 +42,9 @@ public:
     void print_info() const;
 
 private:
+    MPI_Comm gridcomm;
     int procdim;
+    int nneighbors;
     int numparts;
     double procwidth;
     std::vector<int> myids;
@@ -56,7 +58,9 @@ ParticleStore::ParticleStore()
     : initialized(false) {}
 
 ParticleStore::ParticleStore(const ParticleStore& rhs)
-    : procdim(rhs.procdim),
+    : gridcomm(rhs.gridcomm),
+      procdim(rhs.procdim),
+      nneighbors(rhs.nneighbors),
       numparts(rhs.numparts),
       procwidth(rhs.procwidth),
       myids(rhs.myids),
@@ -83,6 +87,32 @@ ParticleStore::ParticleStore(const particle_t *parts, int numparts, double size)
         }
 
     disjoint_partition_check();
+
+    std::vector<int> dests, weights;
+    int reorder = 0;
+    int procrow = myprocrow();
+    int proccol = myproccol();
+
+    for (int dx = -1; dx <= 1; ++dx)
+        for (int dy = -1; dy <= 1; ++dy)
+        {
+            int dest = myrank + (dx*procdim + dy);
+            int row = procrow + dx;
+            int col = proccol + dy;
+
+            if (row >= 0 && row < procdim && col >= 0 && col < procdim)
+            {
+                dests.push_back(dest);
+                weights.push_back(1);
+            }
+        }
+
+    nneighbors = static_cast<int>(dests.size());
+    MPI_Dist_graph_create(MPI_COMM_WORLD, 1, &myrank, &nneighbors, dests.data(), weights.data(), MPI_INFO_NULL, reorder, &gridcomm);
+
+    int indegree, outdegree, weighted;
+    MPI_Dist_graph_neighbors_count(gridcomm, &indegree, &outdegree, &weighted);
+    MPI_ASSERT(indegree == outdegree && indegree == nneighbors);
 }
 
 ParticleStore& ParticleStore::operator=(ParticleStore other)
@@ -93,8 +123,10 @@ ParticleStore& ParticleStore::operator=(ParticleStore other)
 
 void swap(ParticleStore& lhs, ParticleStore& rhs)
 {
+    std::swap(lhs.gridcomm, rhs.gridcomm);
     std::swap(lhs.procdim, rhs.procdim);
     std::swap(lhs.numparts, rhs.numparts);
+    std::swap(lhs.nneighbors, rhs.nneighbors);
     std::swap(lhs.procwidth, rhs.procwidth);
     std::swap(lhs.myids, rhs.myids);
     std::swap(lhs.myparts, rhs.myparts);
@@ -200,7 +232,7 @@ void ParticleStore::print_info() const
     {
         if (myrank == i)
         {
-            fprintf(stderr, "P(%d, %d) currently stores %d particles\n", myprocrow(), myproccol(), static_cast<int>(myids.size()));
+            fprintf(stderr, "P(%d, %d) currently stores %d particles and has %d neighbor processors\n", myprocrow(), myproccol(), static_cast<int>(myids.size()), nneighbors);
         }
         MPI_Barrier(MPI_COMM_WORLD);
     }
