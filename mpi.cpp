@@ -108,10 +108,20 @@ void init_simulation(particle_t *parts, int n, double size, int rank, int procs)
         numcolprocs++;
     numcolprocs--;
 
-    rowprocwidth = size / numrowprocs;
-    colprocwidth = size / numcolprocs;
     myrowproc = myrank / numcolprocs;
     mycolproc = myrank % numcolprocs;
+
+    int bindim = static_cast<int>(std::min(gridsize / (cutoff + 1e-16), static_cast<double>(1<<12)));
+    double binwidth = gridsize / bindim;
+    int binsperrow = (bindim+numrowprocs-1) / numrowprocs;
+    int binspercol = (bindim+numcolprocs-1) / numcolprocs;
+    int mynumbinrows = myrowproc != numrowprocs-1? binsperrow : bindim - (numrowprocs-1)*binsperrow;
+    int mynumbincols = mycolproc != numcolprocs-1? binspercol : bindim - (numcolprocs-1)*binspercol;
+    int mybinrowoffset = binsperrow*myrowproc;
+    int mybincoloffset = binspercol*mycolproc;
+
+    rowprocwidth = binwidth * binsperrow;
+    colprocwidth = binwidth * binspercol;
 
     if (myrank == 0) fprintf(stderr, "Running with %d processor rows and %d processor columns (%d processors unused)\n", numrowprocs, numcolprocs, nprocs - numrowprocs*numcolprocs);
 
