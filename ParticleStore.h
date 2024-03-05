@@ -14,6 +14,8 @@
 #include <assert.h>
 #include <mpi.h>
 
+MPI_Datatype NAMED_PARTICLE;
+
 typedef struct { particle_t p; int id; } named_particle_t;
 
 void apply_force(particle_t& target, const particle_t& ref)
@@ -175,6 +177,15 @@ ParticleStore::ParticleStore(const particle_t *parts, int numparts, double size)
     int indegree, outdegree, weighted;
     MPI_Dist_graph_neighbors_count(gridcomm, &indegree, &outdegree, &weighted);
     MPI_ASSERT(indegree == outdegree && indegree == nneighbors);
+
+    int nitems = 2;
+    int blocklens[2] = {1,1};
+    MPI_Datatype types[2] = {PARTICLE, MPI_INT};
+    MPI_Aint offsets[2];
+    offsets[0] = offsetof(named_particle_t, p);
+    offsets[1] = offsetof(named_particle_t, id);
+    MPI_Type_create_struct(nitems, blocklens, offsets, types, &NAMED_PARTICLE);
+    MPI_Type_commit(&NAMED_PARTICLE);
 }
 
 ParticleStore& ParticleStore::operator=(ParticleStore other)
@@ -386,19 +397,19 @@ std::vector<named_particle_t> ParticleStore::gather_neighbor_particles() const
     std::vector<named_particle_t> sendbuf = get_my_named_particles();
     std::vector<named_particle_t> recvbuf(totrecv);
 
-    MPI_Datatype NAMED_PARTICLE;
-    int nitems = 2;
-    int blocklens[2] = {1,1};
-    MPI_Datatype types[2] = {PARTICLE, MPI_INT};
-    MPI_Aint offsets[2];
-    offsets[0] = offsetof(named_particle_t, p);
-    offsets[1] = offsetof(named_particle_t, id);
-    MPI_Type_create_struct(nitems, blocklens, offsets, types, &NAMED_PARTICLE);
-    MPI_Type_commit(&NAMED_PARTICLE);
+    //MPI_Datatype NAMED_PARTICLE;
+    //int nitems = 2;
+    //int blocklens[2] = {1,1};
+    //MPI_Datatype types[2] = {PARTICLE, MPI_INT};
+    //MPI_Aint offsets[2];
+    //offsets[0] = offsetof(named_particle_t, p);
+    //offsets[1] = offsetof(named_particle_t, id);
+    //MPI_Type_create_struct(nitems, blocklens, offsets, types, &NAMED_PARTICLE);
+    //MPI_Type_commit(&NAMED_PARTICLE);
 
     MPI_Neighbor_allgatherv(sendbuf.data(), mycount, NAMED_PARTICLE, recvbuf.data(), neighbor_counts.data(), displs.data(), NAMED_PARTICLE, gridcomm);
 
-    MPI_Type_free(&NAMED_PARTICLE);
+    //MPI_Type_free(&NAMED_PARTICLE);
 
     return recvbuf;
 }
