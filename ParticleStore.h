@@ -14,6 +14,8 @@
 #include <assert.h>
 #include <mpi.h>
 
+typedef struct { particle_t p; int id; } named_particle_t;
+
 template <class T>
 std::string vector_string(const std::vector<T>& v)
 {
@@ -46,7 +48,8 @@ public:
     int get_particle_rank(const particle_t& p) const;
     void gather_particles(particle_t *parts) const;
 
-    std::vector<particle_t> gather_neighbor_particles() const;
+    std::vector<named_particle_t> get_my_named_particles() const;
+    std::vector<named_particle_t> gather_neighbor_particles() const;
 
     friend void swap(ParticleStore& lhs, ParticleStore& rhs);
 
@@ -298,7 +301,23 @@ void ParticleStore::gather_particles(particle_t *parts) const
     MPI_Barrier(MPI_COMM_WORLD);
 }
 
-std::vector<particle_t> ParticleStore::gather_neighbor_particles() const
+std::vector<named_particle_t> ParticleStore::get_my_named_particles() const
+{
+    sanity_check();
+
+    std::vector<named_particle_t> parts;
+    parts.reserve(myids.size());
+
+    for (int i = 0; i < myids.size(); ++i)
+    {
+        named_particle_t p = {myparts[i], myids[i]};
+        parts.push_back(p);
+    }
+
+    return parts;
+}
+
+std::vector<named_particle_t> ParticleStore::gather_neighbor_particles() const
 {
     sanity_check();
 
@@ -315,11 +334,26 @@ std::vector<particle_t> ParticleStore::gather_neighbor_particles() const
     std::partial_sum(neighbor_counts.begin(), neighbor_counts.end()-1, displs.begin()+1);
 
     int totrecv = neighbor_counts.back() + displs.back();
-    std::vector<particle_t> parts(totrecv);
 
-    MPI_Neighbor_allgatherv(myparts.data(), mycount, PARTICLE, parts.data(), neighbor_counts.data(), displs.data(), PARTICLE, gridcomm);
 
-    return parts;
+    std::vector<named_particle_t> sendbuf = get_my_named_particles();
+    std::vector<named_particle_t> recvbuf(totrecv);
+
+    MPI_Datatype NAMED_PARTICLE;
+    int nitems = 2;
+    int blocklens[2] = {1,1};
+    MPI_Datatype types[2] = {PARTICLE, MPI_INT};
+    MPI_Aint offsets[2];
+    offsets[0] = offsetof(named_particle_t, p);
+    offsets[1] = offsetof(named_particle_t, id);
+    MPI_Type_create_struct(nitems, blocklens, offsets, types, &NAMED_PARTICLE);
+    MPI_Type_commit(&NAMED_PARTICLE);
+
+    MPI_Neighbor_allgatherv(myparts.data(), mycount, NAMED_PARTICLE, recvbuf.data(), neighbor_counts.data(), displs.data(), NAMED_PARTICLE, gridcomm);
+
+    MPI_Type_free(&NAMED_PARTICLE);
+
+    return recvbuf;
 }
 
 
