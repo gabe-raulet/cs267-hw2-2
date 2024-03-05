@@ -335,11 +335,14 @@ void ParticleStore::gather_particles(particle_t *parts) const
 
     gather_items(allids, allparts, 0);
 
-    MPI_ASSERT(allids.size() == numparts && allparts.size() == numparts);
+    if (myrank == 0) MPI_ASSERT(allids.size() == numparts && allparts.size() == numparts);
 
-    for (int i = 0; i < numparts; ++i)
+    if (myrank == 0)
     {
-        parts[allids[i]] = allparts[i];
+        for (int i = 0; i < numparts; ++i)
+        {
+            parts[allids[i]] = allparts[i];
+        }
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
