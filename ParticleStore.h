@@ -42,6 +42,8 @@ public:
     ParticleStore(const particle_t *parts, int numparts, double size);
     ParticleStore& operator=(ParticleStore other);
 
+    void communicate_particles();
+
     int myprocrow() const;
     int myproccol() const;
 
@@ -356,5 +358,28 @@ std::vector<named_particle_t> ParticleStore::gather_neighbor_particles() const
     return recvbuf;
 }
 
+void ParticleStore::communicate_particles()
+{
+    sanity_check();
+
+    int myrank = getmyrank(MPI_COMM_WORLD);
+    int nprocs = getnprocs(MPI_COMM_WORLD);
+
+    std::vector<named_particle_t> named_neighbors = gather_neighbor_particles();
+
+    myids.clear();
+    myparts.clear();
+
+    for (auto it = named_neighbors.begin(); it != named_neighbors.end(); ++it)
+    {
+        if (get_particle_rank(it->p) == myrank)
+        {
+            myids.push_back(it->id);
+            myparts.push_back(it->p);
+        }
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+}
 
 #endif
