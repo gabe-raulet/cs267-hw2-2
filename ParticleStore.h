@@ -289,7 +289,6 @@ void ParticleStore::print_info() const
 void ParticleStore::gather_items(std::vector<int>& allids, std::vector<particle_t>& allparts, int root) const
 {
     sanity_check();
-    disjoint_partition_check();
 
     allids.clear();
     allparts.clear();
@@ -394,7 +393,7 @@ std::vector<named_particle_t> ParticleStore::gather_neighbor_particles() const
     MPI_Type_create_struct(nitems, blocklens, offsets, types, &NAMED_PARTICLE);
     MPI_Type_commit(&NAMED_PARTICLE);
 
-    MPI_Neighbor_allgatherv(myparts.data(), mycount, NAMED_PARTICLE, recvbuf.data(), neighbor_counts.data(), displs.data(), NAMED_PARTICLE, gridcomm);
+    MPI_Neighbor_allgatherv(sendbuf.data(), mycount, NAMED_PARTICLE, recvbuf.data(), neighbor_counts.data(), displs.data(), NAMED_PARTICLE, gridcomm);
 
     MPI_Type_free(&NAMED_PARTICLE);
 
@@ -423,6 +422,11 @@ void ParticleStore::communicate_particles()
         }
     }
 
+    int totcount;
+    int mycount = static_cast<int>(myids.size());
+    MPI_Reduce(&mycount, &totcount, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    if (myrank == 0) MPI_ASSERT(totcount == numparts);
+
     MPI_Barrier(MPI_COMM_WORLD);
 }
 
@@ -433,6 +437,8 @@ void ParticleStore::compute_forces()
 
     for (auto it = myparts.begin(); it != myparts.end(); ++it)
         it->ax = it->ay = 0;
+
+    MPI_Barrier(MPI_COMM_WORLD);
 
     std::vector<named_particle_t> refparts = gather_neighbor_particles();
 
