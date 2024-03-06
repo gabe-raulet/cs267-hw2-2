@@ -107,7 +107,7 @@ ParticleGrid::ParticleGrid(const particle_t *parts, int n, double size)
             for (int dy = -1; dy <= 1; ++dy)
             {
                 if (dx == 0 && dy == 0)
-                    return;
+                    continue;
 
                 int dest = myrank + (dx*numcolprocs + dy);
                 int row = myrowproc + dx;
@@ -197,10 +197,13 @@ void ParticleGrid::compute_forces()
         it->p.ax = it->p.ay = 0;
 
     auto neighparts = gather_neighbor_particles();
-    std::copy(myparts.begin(), myparts.end(), std::back_inserter(neighparts));
 
     for (auto it1 = myparts.begin(); it1 != myparts.end(); ++it1)
         for (auto it2 = neighparts.begin(); it2 != neighparts.end(); ++it2)
+            apply_force(it1->p, it2->p);
+
+    for (auto it1 = myparts.begin(); it1 != myparts.end(); ++it1)
+        for (auto it2 = myparts.begin(); it2 != myparts.end(); ++it2)
             apply_force(it1->p, it2->p);
 }
 
