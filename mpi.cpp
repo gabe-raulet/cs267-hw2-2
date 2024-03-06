@@ -10,7 +10,6 @@ void init_simulation(particle_t *parts, int n, double size, int rank, int procs)
 
 void simulate_one_step(particle_t *parts, int n, double size, int rank, int procs)
 {
-    //grid->print_info();
     grid->compute_forces();
     grid->move_particles();
     grid->update_grid();

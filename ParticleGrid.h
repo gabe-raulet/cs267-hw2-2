@@ -47,22 +47,6 @@ public:
 
     void add_particle(const particle_t& p, int id);
 
-    void print_info() const
-    {
-        static int k = 0;
-
-        for (int i = 0; i < numrowprocs*numcolprocs; ++i)
-        {
-            if (myrank == i)
-            {
-                printf("%d P[%d,%d] has %d particles\n", k++, myrowproc, mycolproc, static_cast<int>(myparts.size()));
-            }
-
-            MPI_Barrier(MPI_COMM_WORLD);
-        }
-    }
-    
-
 private:
     int myrank;
     int procdim, bindim;
@@ -76,13 +60,13 @@ private:
     std::vector<std::list<int>> mybins;
     std::vector<named_particle_t> myparts;
     MPI_Comm gridcomm;
-    MPI_Datatype NAMED_PARTICLE;
 
     void apply_force(particle_t& target, const particle_t& ref);
     void move_particle(particle_t& p);
     int get_particle_rank(const particle_t& p);
     int get_particle_bin(const particle_t& p);
     std::vector<named_particle_t> gather_neighbor_particles();
+    void commit_named_particle_type(MPI_Datatype *NAMED_PARTICLE);
 };
 
 ParticleGrid::ParticleGrid(const particle_t *parts, int n, double size)
@@ -122,6 +106,9 @@ ParticleGrid::ParticleGrid(const particle_t *parts, int n, double size)
         for (int dx = -1; dx <= 1; ++dx)
             for (int dy = -1; dy <= 1; ++dy)
             {
+                if (dx == 0 && dy == 0)
+                    return;
+
                 int dest = myrank + (dx*numcolprocs + dy);
                 int row = myrowproc + dx;
                 int col = mycolproc + dy;
@@ -134,23 +121,25 @@ ParticleGrid::ParticleGrid(const particle_t *parts, int n, double size)
             }
     }
 
-    int reorder = 0; /* TODO: Will want to make reorder=1 for improved performance, but will need to be careful! */
+    int reorder = 1; /* TODO: Will want to make reorder=1 for improved performance, but will need to be careful! */
     nneighbors = static_cast<int>(dests.size());
     MPI_Dist_graph_create(MPI_COMM_WORLD, 1, &myrank, &nneighbors, dests.data(), weights.data(), MPI_INFO_NULL, reorder, &gridcomm);
 
     int indegree, outdegree, weighted;
     MPI_Dist_graph_neighbors_count(gridcomm, &indegree, &outdegree, &weighted);
     MPI_ASSERT(indegree == outdegree && indegree == nneighbors);
+}
 
+void ParticleGrid::commit_named_particle_type(MPI_Datatype *NAMED_PARTICLE)
+{
     int nitems = 2;
     int blocklens[2] = {1,1};
     MPI_Datatype types[2] = {PARTICLE, MPI_INT};
     MPI_Aint offsets[2];
     offsets[0] = offsetof(named_particle_t, p);
     offsets[1] = offsetof(named_particle_t, id);
-    MPI_Type_create_struct(nitems, blocklens, offsets, types, &NAMED_PARTICLE);
-    MPI_Type_commit(&NAMED_PARTICLE);
-    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Type_create_struct(nitems, blocklens, offsets, types, NAMED_PARTICLE);
+    MPI_Type_commit(NAMED_PARTICLE);
 }
 
 std::vector<named_particle_t> ParticleGrid::gather_neighbor_particles()
@@ -172,7 +161,10 @@ std::vector<named_particle_t> ParticleGrid::gather_neighbor_particles()
     int totrecv = recvcounts.back() + displs.back();
     std::vector<named_particle_t> recvbuf(totrecv);
 
+    MPI_Datatype NAMED_PARTICLE;
+    commit_named_particle_type(&NAMED_PARTICLE);
     MPI_Neighbor_allgatherv(myparts.data(), mycount, NAMED_PARTICLE, recvbuf.data(), recvcounts.data(), displs.data(), NAMED_PARTICLE, gridcomm);
+    MPI_Type_free(&NAMED_PARTICLE);
 
     return recvbuf;
 }
@@ -205,6 +197,7 @@ void ParticleGrid::compute_forces()
         it->p.ax = it->p.ay = 0;
 
     auto neighparts = gather_neighbor_particles();
+    std::copy(myparts.begin(), myparts.end(), std::back_inserter(neighparts));
 
     for (auto it1 = myparts.begin(); it1 != myparts.end(); ++it1)
         for (auto it2 = neighparts.begin(); it2 != neighparts.end(); ++it2)
@@ -227,6 +220,7 @@ void ParticleGrid::add_particle(const particle_t& p, int id)
 void ParticleGrid::update_grid()
 {
     auto neighparts = gather_neighbor_particles();
+    std::copy(myparts.begin(), myparts.end(), std::back_inserter(neighparts));
 
     for (auto it = mybins.begin(); it != mybins.end(); ++it)
         it->clear();
@@ -263,7 +257,10 @@ void ParticleGrid::gather_particles(particle_t *parts)
         allparts.resize(numparts);
     }
 
+    MPI_Datatype NAMED_PARTICLE;
+    commit_named_particle_type(&NAMED_PARTICLE);
     MPI_Gatherv(myparts.data(), mycount, NAMED_PARTICLE, allparts.data(), recvcounts.data(), displs.data(), NAMED_PARTICLE, 0, MPI_COMM_WORLD);
+    MPI_Type_free(&NAMED_PARTICLE);
 
     if (myrank == 0)
         for (int i = 0; i < numparts; ++i)
