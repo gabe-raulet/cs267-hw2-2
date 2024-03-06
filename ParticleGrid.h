@@ -203,8 +203,29 @@ void ParticleGrid::compute_forces()
             apply_force(it1->p, it2->p);
 
     for (auto it1 = myparts.begin(); it1 != myparts.end(); ++it1)
-        for (auto it2 = myparts.begin(); it2 != myparts.end(); ++it2)
-            apply_force(it1->p, it2->p);
+    {
+        int binid = get_particle_bin(it1->p);
+
+        for (int dx = -1; dx <= 1; ++dx)
+            for (int dy = -1; dy <= 1; ++dy)
+            {
+                int refbinid = binid + dx*mynumbincols() + dy;
+
+                if (refbinid >= 0 && refbinid < mynumbinrows()*mynumbincols())
+                {
+                    const auto& refbin = mybins[refbinid];
+
+                    for (auto it2 = refbin.cbegin(); it2 != refbin.cend(); ++it2)
+                    {
+                        apply_force(it1->p, myparts[*it2].p);
+                    }
+                }
+            }
+    }
+
+    //for (auto it1 = myparts.begin(); it1 != myparts.end(); ++it1)
+    //    for (auto it2 = myparts.begin(); it2 != myparts.end(); ++it2)
+    //        apply_force(it1->p, it2->p);
 }
 
 void ParticleGrid::add_particle(const particle_t& p, int id)
@@ -214,9 +235,8 @@ void ParticleGrid::add_particle(const particle_t& p, int id)
 
     int binid = get_particle_bin(p);
     int localid = myparts.size();
-    mybins[binid].push_back(localid);
 
-    bintable.push_back(binid);
+    mybins[binid].push_back(localid);
     myparts.push_back({p, id});
 }
 
@@ -228,7 +248,6 @@ void ParticleGrid::update_grid()
     for (auto it = mybins.begin(); it != mybins.end(); ++it)
         it->clear();
 
-    bintable.clear();
     myparts.clear();
 
     for (auto it = neighparts.begin(); it != neighparts.end(); ++it)
