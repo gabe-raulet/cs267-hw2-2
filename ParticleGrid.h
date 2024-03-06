@@ -47,6 +47,22 @@ public:
 
     void add_particle(const particle_t& p, int id);
 
+    void print_info() const
+    {
+        static int k = 0;
+
+        for (int i = 0; i < numrowprocs*numcolprocs; ++i)
+        {
+            if (myrank == i)
+            {
+                printf("%d P[%d,%d] has %d particles\n", k++, myrowproc, mycolproc, static_cast<int>(myparts.size()));
+            }
+
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
+    }
+    
+
 private:
     int myrank;
     int procdim, bindim;
@@ -65,6 +81,7 @@ private:
     void apply_force(particle_t& target, const particle_t& ref);
     void move_particle(particle_t& p);
     int get_particle_rank(const particle_t& p);
+    int get_particle_bin(const particle_t& p);
     std::vector<named_particle_t> gather_neighbor_particles();
 };
 
@@ -88,6 +105,8 @@ ParticleGrid::ParticleGrid(const particle_t *parts, int n, double size)
     int binsperrow, binspercol;
     bindim = static_cast<int>(std::min(gridsize / (cutoff + 1e-16), static_cast<double>(1<<12)));
     binwidth = gridsize / bindim;
+
+    mybins.resize(mynumbinrows()*mynumbincols());
 
     if (myrank == 0) fprintf(stderr, "Running with %d processor rows and %d processor columns (%d processors unused)\n", numrowprocs, numcolprocs, nprocs - numrowprocs*numcolprocs);
 
@@ -158,6 +177,21 @@ std::vector<named_particle_t> ParticleGrid::gather_neighbor_particles()
     return recvbuf;
 }
 
+int ParticleGrid::get_particle_bin(const particle_t& p)
+{
+    //#ifndef NDEBUG
+    MPI_ASSERT(get_particle_rank(p) == myrank);
+    //#endif
+
+    double x = p.x - rowprocwidth()*myrowproc;
+    double y = p.y - colprocwidth()*mycolproc;
+
+    int rowid = static_cast<int>(x / binwidth);
+    int colid = static_cast<int>(y / binwidth);
+
+    return rowid*mynumbincols() + colid;
+}
+
 int ParticleGrid::get_particle_rank(const particle_t& p)
 {
     int rowid = static_cast<int>(p.x / rowprocwidth());
@@ -182,12 +216,22 @@ void ParticleGrid::add_particle(const particle_t& p, int id)
     if (get_particle_rank(p) != myrank)
         return;
 
+    int binid = get_particle_bin(p);
+    int localid = myparts.size();
+    mybins[binid].push_back(localid);
+
+    bintable.push_back(binid);
     myparts.push_back({p, id});
 }
 
 void ParticleGrid::update_grid()
 {
     auto neighparts = gather_neighbor_particles();
+
+    for (auto it = mybins.begin(); it != mybins.end(); ++it)
+        it->clear();
+
+    bintable.clear();
     myparts.clear();
 
     for (auto it = neighparts.begin(); it != neighparts.end(); ++it)
