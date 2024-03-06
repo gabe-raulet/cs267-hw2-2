@@ -107,7 +107,7 @@ ParticleGrid::ParticleGrid(const particle_t *parts, int n, double size)
             for (int dy = -1; dy <= 1; ++dy)
             {
                 if (dx == 0 && dy == 0)
-                    return;
+                    continue;
 
                 int dest = myrank + (dx*numcolprocs + dy);
                 int row = myrowproc + dx;
