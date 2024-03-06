@@ -45,7 +45,10 @@ public:
     double rowprocwidth() const { return binwidth * binsperrow(); }
     double colprocwidth() const { return binwidth * binspercol(); }
 
+    void add_particle(const particle_t& p, int id);
+
 private:
+    int myrank;
     int procdim, bindim;
     int numrowprocs, numcolprocs;
     int myrowproc, mycolproc;
@@ -53,6 +56,8 @@ private:
     int numparts;
     double gridsize;
     int nneighbors;
+    std::vector<int> bintable;
+    std::vector<std::list<int>> mybins;
     std::vector<named_particle_t> myparts;
     MPI_Comm gridcomm;
     MPI_Datatype NAMED_PARTICLE;
@@ -66,7 +71,7 @@ private:
 ParticleGrid::ParticleGrid(const particle_t *parts, int n, double size)
     : numparts(n), gridsize(size)
 {
-    int myrank, nprocs;
+    int nprocs;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
@@ -89,8 +94,7 @@ ParticleGrid::ParticleGrid(const particle_t *parts, int n, double size)
     MPI_ASSERT(std::min(rowprocwidth(), colprocwidth()) >= 2*cutoff + 1e-16);
 
     for (int i = 0; i < numparts; ++i)
-        if (get_particle_rank(parts[i]) == myrank)
-            myparts.push_back({parts[i], i});
+        add_particle(parts[i], i);
 
     std::vector<int> dests, weights;
 
@@ -173,27 +177,30 @@ void ParticleGrid::compute_forces()
             apply_force(it1->p, it2->p);
 }
 
+void ParticleGrid::add_particle(const particle_t& p, int id)
+{
+    if (get_particle_rank(p) != myrank)
+        return;
+
+    myparts.push_back({p, id});
+}
+
 void ParticleGrid::update_grid()
 {
-    int myrank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-
     auto neighparts = gather_neighbor_particles();
     myparts.clear();
 
     for (auto it = neighparts.begin(); it != neighparts.end(); ++it)
-        if (get_particle_rank(it->p) == myrank)
-            myparts.push_back(*it);
+        add_particle(it->p, it->id);
 }
 
 void ParticleGrid::gather_particles(particle_t *parts)
 {
-    int myrank, nprocs;
+    int nprocs;
     int totcount, mycount;
     std::vector<named_particle_t> allparts;
     std::vector<int> recvcounts, displs;
 
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
 
     if (myrank == 0)
