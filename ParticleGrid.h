@@ -36,12 +36,20 @@ public:
     void update_grid();
     void gather_particles(particle_t *parts);
 
+    int binsperrow() const { return (bindim+numrowprocs-1) / numrowprocs; }
+    int binspercol() const { return (bindim+numcolprocs-1) / numcolprocs; }
+
+    int mynumbinrows() const { return myrowproc != numrowprocs-1? binsperrow() : bindim - (numrowprocs-1)*binsperrow(); }
+    int mynumbincols() const { return mycolproc != numcolprocs-1? binspercol() : bindim - (numcolprocs-1)*binspercol(); }
+
+    double rowprocwidth() const { return binwidth * binsperrow(); }
+    double colprocwidth() const { return binwidth * binspercol(); }
+
 private:
     int procdim, bindim;
     int numrowprocs, numcolprocs;
-    int mynumbinrows, mynumbincols;
-    int myrowproc, mycolproc, mybinrowoffset, mybincoloffset;
-    double binwidth, rowprocwidth, colprocwidth;
+    int myrowproc, mycolproc;
+    double binwidth;
     int numparts;
     double gridsize;
     int nneighbors;
@@ -75,19 +83,10 @@ ParticleGrid::ParticleGrid(const particle_t *parts, int n, double size)
     int binsperrow, binspercol;
     bindim = static_cast<int>(std::min(gridsize / (cutoff + 1e-16), static_cast<double>(1<<12)));
     binwidth = gridsize / bindim;
-    binsperrow = (bindim+numrowprocs-1) / numrowprocs;
-    binspercol = (bindim+numcolprocs-1) / numcolprocs;
-    mynumbinrows = myrowproc != numrowprocs-1? binsperrow : bindim - (numrowprocs-1)*binsperrow;
-    mynumbincols = mycolproc != numcolprocs-1? binspercol : bindim - (numcolprocs-1)*binspercol;
-    mybinrowoffset = binsperrow*myrowproc;
-    mybincoloffset = binspercol*mycolproc;
-
-    rowprocwidth = binwidth * binsperrow;
-    colprocwidth = binwidth * binspercol;
 
     if (myrank == 0) fprintf(stderr, "Running with %d processor rows and %d processor columns (%d processors unused)\n", numrowprocs, numcolprocs, nprocs - numrowprocs*numcolprocs);
 
-    MPI_ASSERT(std::min(rowprocwidth, colprocwidth) >= 2*cutoff + 1e-16);
+    MPI_ASSERT(std::min(rowprocwidth(), colprocwidth()) >= 2*cutoff + 1e-16);
 
     for (int i = 0; i < numparts; ++i)
         if (get_particle_rank(parts[i]) == myrank)
@@ -157,8 +156,8 @@ std::vector<named_particle_t> ParticleGrid::gather_neighbor_particles()
 
 int ParticleGrid::get_particle_rank(const particle_t& p)
 {
-    int rowid = static_cast<int>(p.x / rowprocwidth);
-    int colid = static_cast<int>(p.y / colprocwidth);
+    int rowid = static_cast<int>(p.x / rowprocwidth());
+    int colid = static_cast<int>(p.y / colprocwidth());
     return rowid*numcolprocs + colid;
 }
 
